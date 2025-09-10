@@ -1,8 +1,17 @@
 //=====================================================================
 // Traffic Light Controller with Left Turns (FSM)
 // Author: Rayon Dhali
-// Description: 8-state FSM controlling a 2-way intersection with
-//              dedicated left-turn arrows and straight-through signals.
+//
+// Description:
+// ------------
+// An 8-state finite state machine (FSM) controlling a 2-way intersection
+// with dedicated left-turn arrows and straight-through signals.
+//
+// Order of operation:
+//   NS Left Green → NS Left Yellow → NS Straight Green → NS Straight Yellow
+//   → EW Left Green → EW Left Yellow → EW Straight Green → EW Straight Yellow
+//
+// Red lights are ON for all signals not active in the current state.
 //=====================================================================
 
 module traffic_light_intersection (
@@ -17,10 +26,11 @@ module traffic_light_intersection (
     //=============================================================
     // Output encoding (one-hot per signal light)
     //=============================================================
-    localparam LEFT_GREEN      = 4'b1000; // Left arrow ON (green)
-    localparam STRAIGHT_GREEN  = 4'b0100; // Straight green ON
-    localparam YELLOW          = 4'b0010; // Yellow (used after left or straight)
-    localparam RED             = 4'b0001; // Red light ON
+    localparam LEFT_GREEN       = 4'b1000; // Left arrow ON (green)
+    localparam STRAIGHT_GREEN   = 4'b0100; // Straight green ON
+    localparam LEFT_YELLOW      = 4'b0010; // Left arrow turns yellow
+    localparam STRAIGHT_YELLOW  = 4'b0010; // Straight green turns yellow
+    localparam RED              = 4'b0001; // Red light ON
 
     //=============================================================
     // State encoding (8 states total)
@@ -71,43 +81,51 @@ module traffic_light_intersection (
         case (current_state)
             //=================== NORTH-SOUTH CYCLE ===================
             S0_NS_LEFT: begin
-                north_tl = LEFT_GREEN; south_tl = LEFT_GREEN; // Left arrows ON
+                north_tl = LEFT_GREEN; south_tl = LEFT_GREEN; // NS left arrows ON
+                east_tl  = RED; west_tl = RED;               // EW held at Red
                 if (counter >= LEFT_TIME) next_state = S1_NS_LEFT_YEL;
             end
 
             S1_NS_LEFT_YEL: begin
-                north_tl = YELLOW; south_tl = YELLOW; // Left arrows → Yellow
+                north_tl = LEFT_YELLOW; south_tl = LEFT_YELLOW; // NS left turns yellow
+                east_tl  = RED; west_tl = RED;                  // EW held at Red
                 if (counter >= YELLOW_TIME) next_state = S2_NS_STRAIGHT;
             end
 
             S2_NS_STRAIGHT: begin
-                north_tl = STRAIGHT_GREEN; south_tl = STRAIGHT_GREEN; // Straight green
+                north_tl = STRAIGHT_GREEN; south_tl = STRAIGHT_GREEN; // NS straight green
+                east_tl  = RED; west_tl = RED;                        // EW held at Red
                 if (counter >= GREEN_TIME) next_state = S3_NS_YELLOW;
             end
 
             S3_NS_YELLOW: begin
-                north_tl = YELLOW; south_tl = YELLOW; // Straight yellow
+                north_tl = STRAIGHT_YELLOW; south_tl = STRAIGHT_YELLOW; // NS straight yellow
+                east_tl  = RED; west_tl = RED;                          // EW held at Red
                 if (counter >= YELLOW_TIME) next_state = S4_EW_LEFT;
             end
 
             //=================== EAST-WEST CYCLE ===================
             S4_EW_LEFT: begin
-                east_tl = LEFT_GREEN; west_tl = LEFT_GREEN; // Left arrows ON
+                east_tl = LEFT_GREEN; west_tl = LEFT_GREEN; // EW left arrows ON
+                north_tl = RED; south_tl = RED;             // NS held at Red
                 if (counter >= LEFT_TIME) next_state = S5_EW_LEFT_YEL;
             end
 
             S5_EW_LEFT_YEL: begin
-                east_tl = YELLOW; west_tl = YELLOW; // Left arrows → Yellow
+                east_tl = LEFT_YELLOW; west_tl = LEFT_YELLOW; // EW left turns yellow
+                north_tl = RED; south_tl = RED;               // NS held at Red
                 if (counter >= YELLOW_TIME) next_state = S6_EW_STRAIGHT;
             end
 
             S6_EW_STRAIGHT: begin
-                east_tl = STRAIGHT_GREEN; west_tl = STRAIGHT_GREEN; // Straight green
+                east_tl = STRAIGHT_GREEN; west_tl = STRAIGHT_GREEN; // EW straight green
+                north_tl = RED; south_tl = RED;                     // NS held at Red
                 if (counter >= GREEN_TIME) next_state = S7_EW_YELLOW;
             end
 
             S7_EW_YELLOW: begin
-                east_tl = YELLOW; west_tl = YELLOW; // Straight yellow
+                east_tl = STRAIGHT_YELLOW; west_tl = STRAIGHT_YELLOW; // EW straight yellow
+                north_tl = RED; south_tl = RED;                       // NS held at Red
                 if (counter >= YELLOW_TIME) next_state = S0_NS_LEFT;
             end
         endcase
