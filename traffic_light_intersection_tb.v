@@ -1,62 +1,87 @@
 //=====================================================================
-// Testbench for Traffic Light Intersection Controller
+// Testbench for Traffic Light Intersection FSM (with Left Turns)
 // Author: Rayon Dhali
-// Description: This testbench verifies the functionality of the
-//              2-way intersection traffic light controller FSM.
-//              It applies a clock and reset, then observes how
-//              the North-South (NS) and East-West (EW) traffic
-//              lights change state over time.
+//
+// Purpose:
+// --------
+// This testbench simulates the Traffic Light FSM by applying a clock
+// and reset signal, then monitoring how the North-South (NS) and
+// East-West (EW) traffic lights behave over time. It verifies that
+// the system cycles through the 8 states in the correct order:
+//
+//   NS Left Green → NS Left Yellow → NS Straight Green → NS Straight Yellow
+//   → EW Left Green → EW Left Yellow → EW Straight Green → EW Straight Yellow
+//
+// Red lights are implied for all signals not active in a given state.
 //=====================================================================
 
-`timescale 1ns/1ps  // Set simulation time unit (1ns) and precision (1ps)
+`timescale 1ns/1ps   // Simulation uses nanoseconds with picosecond precision
 
 module traffic_light_intersection_tb;
 
     //=============================================================
-    // Testbench signals
+    // Testbench Signals
     //=============================================================
-    reg clk;           // Clock signal for driving the FSM
-    reg reset;         // Reset signal to initialize the FSM
-
+    reg clk;          // Clock to drive FSM
+    reg reset;        // Reset signal (forces FSM to start in S0)
+    
     // Outputs from the DUT (Device Under Test)
-    wire ns_red, ns_yellow, ns_green;  // North-South lights
-    wire ew_red, ew_yellow, ew_green;  // East-West lights
+    // Each bus [3:0] represents [Left, Green, Yellow, Red]
+    wire [3:0] north_tl;
+    wire [3:0] south_tl;
+    wire [3:0] east_tl;
+    wire [3:0] west_tl;
 
     //=============================================================
-    // DUT Instantiation (connects testbench to design)
+    // DUT Instantiation
     //=============================================================
-    // "uut" = Unit Under Test (common naming convention)
+    // "uut" = Unit Under Test (common naming convention).
+    // We connect the testbench signals to the DUT ports.
     traffic_light_intersection uut (
         .clk(clk),
         .reset(reset),
-        .ns_red(ns_red), .ns_yellow(ns_yellow), .ns_green(ns_green),
-        .ew_red(ew_red), .ew_yellow(ew_yellow), .ew_green(ew_green)
+        .north_tl(north_tl),
+        .south_tl(south_tl),
+        .east_tl(east_tl),
+        .west_tl(west_tl)
     );
 
     //=============================================================
     // Clock Generation
     //=============================================================
-    // Clock toggles every 5ns → full period = 10ns → 100 MHz clock
+    // Toggle the clock every 5ns → creates a 10ns period
+    // which equals a 100 MHz frequency.
     always #5 clk = ~clk;
 
     //=============================================================
-    // Simulation Sequence
+    // Test Sequence
     //=============================================================
     initial begin
-        // Step 1: Initialize signals
-        clk = 0;       // Start with clock low
-        reset = 1;     // Apply reset (active high)
-        
-        // Step 2: Hold reset for 10ns, ensuring DUT starts in known state
-        #10 reset = 0; // Release reset, FSM starts operating
+        //---------------------------------------------------------
+        // STEP 1: Initialize
+        //---------------------------------------------------------
+        clk = 0;          // Start clock low
+        reset = 1;        // Assert reset (FSM forced to state S0: NS Left Green)
 
-        // Step 3: Let simulation run for 300ns
-        // This allows the FSM to cycle through multiple states:
-        //   - NS Green → NS Yellow → EW Green → EW Yellow → repeat
-        #300;
+        //---------------------------------------------------------
+        // STEP 2: Release Reset
+        //---------------------------------------------------------
+        // Hold reset for 10ns, then deassert it so the FSM begins running.
+        #10 reset = 0;
 
-        // Step 4: Stop simulation
-        $stop;         // Halts the simulator (view results in waveform viewer)
+        //---------------------------------------------------------
+        // STEP 3: Let Simulation Run
+        //---------------------------------------------------------
+        // Allow the system to run for 500ns.
+        // With parameters LEFT_TIME=5, GREEN_TIME=5, YELLOW_TIME=2,
+        // this covers multiple full FSM cycles.
+        #500;
+
+        //---------------------------------------------------------
+        // STEP 4: End Simulation
+        //---------------------------------------------------------
+        // Stop the simulator so we can view results in the waveform viewer.
+        $stop;
     end
 
 endmodule
