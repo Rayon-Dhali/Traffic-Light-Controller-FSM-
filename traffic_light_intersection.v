@@ -1,39 +1,57 @@
-//============================================================
-// Traffic Light Controller for 2-Way Intersection
-//============================================================
+//=====================================================================
+// Traffic Light Controller with Left Turns (FSM)
+// Author: Rayon Dhali
+// Description: 8-state FSM controlling a 2-way intersection with
+//              dedicated left-turn arrows and straight-through signals.
+//=====================================================================
+
 module traffic_light_intersection (
-    input  wire clk,       // Clock input
-    input  wire reset,     // Active-high synchronous reset
-    output reg ns_red, ns_yellow, ns_green,  // NS direction lights
-    output reg ew_red, ew_yellow, ew_green   // EW direction lights
+    input  wire clk,    // System clock
+    input  wire reset,  // Active-high synchronous reset
+    output reg [3:0] north_tl, // North traffic lights [Left, Green, Yellow, Red]
+    output reg [3:0] south_tl, // South traffic lights
+    output reg [3:0] east_tl,  // East traffic lights
+    output reg [3:0] west_tl   // West traffic lights
 );
 
-    //============================================================
-    // Parameters for timing
-    //============================================================
-    parameter GREEN_TIME_NS = 5;
-    parameter GREEN_TIME_EW = 5;
-    parameter YELLOW_TIME   = 2;
+    //=============================================================
+    // Output encoding (one-hot per signal light)
+    //=============================================================
+    localparam LEFT_GREEN      = 4'b1000; // Left arrow ON (green)
+    localparam STRAIGHT_GREEN  = 4'b0100; // Straight green ON
+    localparam YELLOW          = 4'b0010; // Yellow (used after left or straight)
+    localparam RED             = 4'b0001; // Red light ON
 
-    //============================================================
-    // State Encoding
-    //============================================================
-    typedef enum reg [1:0] {
-        NS_GREEN  = 2'b00,
-        NS_YELLOW = 2'b01,
-        EW_GREEN  = 2'b10,
-        EW_YELLOW = 2'b11
+    //=============================================================
+    // State encoding (8 states total)
+    //=============================================================
+    typedef enum reg [2:0] {
+        S0_NS_LEFT     = 3'b000,  // NS left arrow green
+        S1_NS_LEFT_YEL = 3'b001,  // NS left arrow yellow
+        S2_NS_STRAIGHT = 3'b010,  // NS straight green
+        S3_NS_YELLOW   = 3'b011,  // NS straight yellow
+        S4_EW_LEFT     = 3'b100,  // EW left arrow green
+        S5_EW_LEFT_YEL = 3'b101,  // EW left arrow yellow
+        S6_EW_STRAIGHT = 3'b110,  // EW straight green
+        S7_EW_YELLOW   = 3'b111   // EW straight yellow
     } state_t;
 
     state_t current_state, next_state;
     integer counter;
 
-    //============================================================
-    // State Register
-    //============================================================
+    //=============================================================
+    // Timing parameters (adjustable)
+    //=============================================================
+    parameter LEFT_TIME   = 5;  // Duration for left-turn green
+    parameter GREEN_TIME  = 5;  // Duration for straight green
+    parameter YELLOW_TIME = 2;  // Duration for yellow
+
+    //=============================================================
+    // State register + counter
+    //=============================================================
     always @(posedge clk) begin
         if (reset) begin
-            current_state <= NS_GREEN;
+            current_state <= S0_NS_LEFT;
             counter <= 0;
         end else begin
             current_state <= next_state;
@@ -41,38 +59,63 @@ module traffic_light_intersection (
         end
     end
 
-    //============================================================
-    // Next State + Output Logic
-    //============================================================
+    //=============================================================
+    // Next state logic + outputs
+    //=============================================================
     always @(*) begin
-        // Default outputs
-        ns_red=0; ns_yellow=0; ns_green=0;
-        ew_red=0; ew_yellow=0; ew_green=0;
+        // Default outputs: all directions Red
+        north_tl = RED; south_tl = RED;
+        east_tl  = RED; west_tl  = RED;
         next_state = current_state;
 
         case (current_state)
-            NS_GREEN: begin
-                ns_green = 1; ew_red = 1;
-                if (counter >= GREEN_TIME_NS) next_state = NS_YELLOW;
+            //=================== NORTH-SOUTH CYCLE ===================
+            S0_NS_LEFT: begin
+                north_tl = LEFT_GREEN; south_tl = LEFT_GREEN; // Left arrows ON
+                if (counter >= LEFT_TIME) next_state = S1_NS_LEFT_YEL;
             end
-            NS_YELLOW: begin
-                ns_yellow = 1; ew_red = 1;
-                if (counter >= YELLOW_TIME) next_state = EW_GREEN;
+
+            S1_NS_LEFT_YEL: begin
+                north_tl = YELLOW; south_tl = YELLOW; // Left arrows → Yellow
+                if (counter >= YELLOW_TIME) next_state = S2_NS_STRAIGHT;
             end
-            EW_GREEN: begin
-                ew_green = 1; ns_red = 1;
-                if (counter >= GREEN_TIME_EW) next_state = EW_YELLOW;
+
+            S2_NS_STRAIGHT: begin
+                north_tl = STRAIGHT_GREEN; south_tl = STRAIGHT_GREEN; // Straight green
+                if (counter >= GREEN_TIME) next_state = S3_NS_YELLOW;
             end
-            EW_YELLOW: begin
-                ew_yellow = 1; ns_red = 1;
-                if (counter >= YELLOW_TIME) next_state = NS_GREEN;
+
+            S3_NS_YELLOW: begin
+                north_tl = YELLOW; south_tl = YELLOW; // Straight yellow
+                if (counter >= YELLOW_TIME) next_state = S4_EW_LEFT;
+            end
+
+            //=================== EAST-WEST CYCLE ===================
+            S4_EW_LEFT: begin
+                east_tl = LEFT_GREEN; west_tl = LEFT_GREEN; // Left arrows ON
+                if (counter >= LEFT_TIME) next_state = S5_EW_LEFT_YEL;
+            end
+
+            S5_EW_LEFT_YEL: begin
+                east_tl = YELLOW; west_tl = YELLOW; // Left arrows → Yellow
+                if (counter >= YELLOW_TIME) next_state = S6_EW_STRAIGHT;
+            end
+
+            S6_EW_STRAIGHT: begin
+                east_tl = STRAIGHT_GREEN; west_tl = STRAIGHT_GREEN; // Straight green
+                if (counter >= GREEN_TIME) next_state = S7_EW_YELLOW;
+            end
+
+            S7_EW_YELLOW: begin
+                east_tl = YELLOW; west_tl = YELLOW; // Straight yellow
+                if (counter >= YELLOW_TIME) next_state = S0_NS_LEFT;
             end
         endcase
     end
 
-    //============================================================
-    // Reset counter whenever state changes
-    //============================================================
+    //=============================================================
+    // Reset counter on state change
+    //=============================================================
     always @(posedge clk) begin
         if (reset) counter <= 0;
         else if (next_state != current_state) counter <= 0;
